@@ -18,16 +18,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3
 
-          # 下载 SDK
+          # 下载 SDK (以 x86_64 为例，如果是其他架构请自行替换链接)
           wget https://downloads.openwrt.org/releases/23.05.2/targets/x86/64/openwrt-sdk-23.05.2-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
           
-          # 解压
+          # 解压并重命名
           tar -xf openwrt-sdk-*.tar.xz
-          
-          # 【重要修正】删除下载的压缩包，防止改名时冲突
           rm openwrt-sdk-*.tar.xz
-          
-          # 现在只会有一个文件夹匹配这个名字，改名就不会出错了
           mv openwrt-sdk-* sdk
 
       - name: Prepare Package
@@ -36,10 +32,12 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           
+          # 拷贝源码
           mkdir -p package/luci-app-geph5
           cd ..
           cp -r Makefile luasrc root sdk/package/luci-app-geph5/
           
+          # 配置
           cd sdk
           make defconfig
           sed -i 's/# CONFIG_PACKAGE_luci-app-geph5 is not set/CONFIG_PACKAGE_luci-app-geph5=m/' .config
