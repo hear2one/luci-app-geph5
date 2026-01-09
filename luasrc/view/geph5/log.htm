@@ -1,0 +1,28 @@
+<fieldset class="cbi-section">
+    <legend><%:System Log%></legend>
+    <div style="text-align: right; margin-bottom: 5px;">
+        <input type="button" class="cbi-button cbi-button-apply" value="<%:Refresh Log%>" onclick="return refreshLog()" />
+    </div>
+    <textarea id="geph5_log_area" style="width: 100%; height: 300px; font-family: monospace; font-size: 12px; background-color: #f0f0f0; border: 1px solid #ccc; padding: 5px;" readonly="readonly">
+<%:Loading logs...%>
+    </textarea>
+</fieldset>
+
+<script type="text/javascript">//<![CDATA[
+    function refreshLog() {
+        var logArea = document.getElementById('geph5_log_area');
+        // 请求后台获取日志
+        XHR.get('<%=luci.dispatcher.build_url("admin", "services", "geph5", "log")%>', null, function(x, data) {
+            if (x.responseText) {
+                logArea.value = x.responseText;
+                // 自动滚动到最底部
+                logArea.scrollTop = logArea.scrollHeight;
+            } else {
+                logArea.value = "<%:No logs found or service not running.%>";
+            }
+        });
+    }
+    
+    // 页面加载完成后自动刷新一次
+    refreshLog();
+//]]></script>
