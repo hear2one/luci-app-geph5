@@ -4,52 +4,87 @@ START=99
 USE_PROCD=1
 
 CONF="geph5"
-PROG=$(uci -q get $CONF.global.binary_path)
+YAML_FILE="/var/etc/geph5.yaml"
 
 start_service() {
     config_load $CONF
     local enabled
-    config_get_bool enabled global enabled 0
+    config_get_bool enabled geph5 enabled 0
 
     [ "$enabled" -eq 1 ] || return 0
 
-    # 简单的检查，如果找不到程序记录一条日志并退出
-    if [ ! -x "$PROG" ]; then
-        logger -t geph5 "Error: Binary not found at $PROG"
+    # 读取界面设置
+    local prog auth_token socks5_port http_port
+    config_get prog geph5 binary_path "/usr/bin/geph5-client"
+    config_get auth_token geph5 auth_token ""
+    config_get socks5_port geph5 socks5_port "9909"
+    config_get http_port geph5 http_port "9919"
+
+    # 检查程序是否存在
+    if [ ! -x "$prog" ]; then
+        logger -t geph5 "Error: Binary not found at $prog"
         return 1
     fi
 
-    local username password auth_token socks5_port socks5_addr http_port http_addr
-    config_get username global username
-    config_get password global password
-    config_get auth_token global auth_token
-    config_get socks5_port global socks5_port "9909"
-    config_get socks5_addr global socks5_addr "0.0.0.0"
-    config_get http_port global http_port "9919"
-    config_get http_addr global http_addr "0.0.0.0"
+    # 检查密钥是否填写
+    if [ -z "$auth_token" ]; then
+        logger -t geph5 "Error: Auth token is empty!"
+        return 1
+    fi
 
+    # --- 核心：模板拼接 ---
+    # 将用户设置填入硬编码的 YAML 模板中
+    mkdir -p /var/etc
+
+    cat <<EOF > $YAML_FILE
+socks5_listen: 127.0.0.1:$socks5_port
+http_proxy_listen: 127.0.0.1:$http_port
+exit_constraint: auto
+bridge_mode: ForceBridges
+cache: /tmp/geph5.db
+passthrough_china: false
+spoof_dns: false
+task_limit: null
+vpn: false
+vpn_fd: null
+
+credentials:
+  secret: "$auth_token"
+
+sess_metadata:
+  filter:
+    ads: true
+    nsfw: false
+
+broker:
+  priority_race:
+    '0':
+      fronted:
+        front: https://www.cdn77.com/
+        host: 1826209743.rsc.cdn77.org
+        override_dns: null
+    '500':
+      fronted:
+        front: https://www.vuejs.org/
+        host: svitania-naidallszei-3.netlify.app
+        override_dns:
+        - 75.2.60.5:443
+
+broker_keys:
+  master: 88c1d2d4197bed815b01a22cadfc6c35aa246dddb553682037a118aebfaa3954
+  mizaru_free: 0558216cbab7a9c46f298f4c26e171add9af87d0694988b8a8fe52ee932aa754
+  mizaru_plus: cf6f58868c6d9459b3a63bc2bd86165631b3e916bad7f62b578cd9614e0bcb3b
+  mizaru_bw: 3082010a0282010100d0ae53a794ea37bf2e100cb3a872177ec6c11e8375fdcbf92960ce0293465674eb1426a1841b7622a58979a5ff3f8aa2301a621545e9b90bb39d1a6bfda19d6ca1aae74a3192ddfd2b9558eb652c3c2c22f42bdde272852fb67d93cae5846213512c474bf799844aee019bf718f6fa64223be06364459fc8dec66796b141d450d730c4fffe1cac7df8f05591560afa44bcf274f6c0e2303b39c21ab09d19b459ee594512b8341f3d407c026e2509f42c6d89f82f6a3a36fd5c05ad423cd99ad39089403eb9122ea60ef6648afff65438e8e26ce41fa55b9b18741965c77a627bae947bd38fc345e9adab42d6c458f6e194e4232cfd3f04924d5a5e932fe769610203010001
+EOF
+
+    # --- 启动进程 ---
     procd_open_instance
-    # 设定启动命令，这里假设 geph5-client 的参数格式
-    procd_set_param command "$PROG" connect
+    # 使用 -c 加载生成的配置文件
+    procd_set_param command "$prog" -c "$YAML_FILE"
     
-    # 如果有用户名密码
-    if [ -n "$username" ] && [ -n "$password" ]; then
-        procd_append_param command --username "$username" --password "$password"
-    fi
-    # 如果有 token
-    if [ -n "$auth_token" ]; then
-        procd_append_param command --credential "$auth_token"
-    fi
-
-    # 设定端口
-    procd_append_param command --socks5-listen "$socks5_addr:$socks5_port"
-    procd_append_param command --http-listen "$http_addr:$http_port"
-
-    # 关键：将日志输出重定向到系统日志，不写本地文件
+    # 日志输出到系统日志 (logread)
     procd_set_param stderr 1
     procd_set_param stdout 1
-    
-    # 进程守护，挂掉自动重启
     procd_set_param respawn
     procd_close_instance
 }
