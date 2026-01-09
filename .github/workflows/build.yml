@@ -1,0 +1,57 @@
+name: Build LuCI App
+
+on:
+  push:
+    paths:
+      - '**'  # 只要有任何文件改动，就触发编译
+  workflow_dispatch: # 允许手动点击按钮触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup OpenWrt SDK
+        run: |
+          # 1. 安装必要的工具
+          sudo apt-get update
+          sudo apt-get install -y build-essential libncurses5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3
+
+          # 2. 下载 x86_64 的 SDK (最常用的架构，编译 LuCI 界面其实不分架构，通用的)
+          wget https://downloads.openwrt.org/releases/23.05.2/targets/x86/64/openwrt-sdk-23.05.2-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          tar -xJF openwrt-sdk-*.tar.xz
+          mv openwrt-sdk-* sdk
+
+      - name: Prepare Package
+        run: |
+          cd sdk
+          # 更新软件源
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          
+          # 把你的代码复制到 SDK 的 package 目录
+          # GitHub Actions 运行时的当前目录就是你的仓库根目录
+          mkdir -p package/luci-app-geph5
+          # 退出 sdk 目录去复制，然后再回来
+          cd ..
+          cp -r Makefile luasrc root sdk/package/luci-app-geph5/
+          
+          cd sdk
+          # 生成配置文件
+          make defconfig
+          # 强制选中你的插件
+          sed -i 's/# CONFIG_PACKAGE_luci-app-geph5 is not set/CONFIG_PACKAGE_luci-app-geph5=m/' .config
+
+      - name: Compile
+        run: |
+          cd sdk
+          # 开始编译，V=s 表示显示详细过程
+          make package/luci-app-geph5/compile V=s
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: luci-app-geph5-ipk
+          path: sdk/bin/packages/*/base/luci-app-geph5_*.ipk
