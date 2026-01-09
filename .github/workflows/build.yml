@@ -21,7 +21,7 @@ jobs:
 
           # 2. 下载 x86_64 的 SDK (最常用的架构，编译 LuCI 界面其实不分架构，通用的)
           wget https://downloads.openwrt.org/releases/23.05.2/targets/x86/64/openwrt-sdk-23.05.2-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-          tar -xJF openwrt-sdk-*.tar.xz
+          tar -xf openwrt-sdk-*.tar.xz
           mv openwrt-sdk-* sdk
 
       - name: Prepare Package
