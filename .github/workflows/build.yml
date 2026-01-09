@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 这里升级到了 v4
 
       - name: Setup OpenWrt SDK
         run: |
@@ -51,7 +51,7 @@ jobs:
           make package/luci-app-geph5/compile V=s
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # 这里是最关键的修正，升级到了 v4
         with:
           name: luci-app-geph5-ipk
           path: sdk/bin/packages/*/base/luci-app-geph5_*.ipk
