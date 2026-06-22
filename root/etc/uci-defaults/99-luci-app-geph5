@@ -1,0 +1,29 @@
+#!/bin/sh
+
+if ! uci -q get geph5.geph5 >/dev/null; then
+	uci set geph5.geph5='geph5'
+fi
+
+set_default() {
+	uci -q get "geph5.geph5.$1" >/dev/null || uci set "geph5.geph5.$1=$2"
+}
+
+set_default enabled 0
+set_default binary_path /usr/bin/geph5-client
+set_default bind_address 127.0.0.1
+set_default socks5_port 9909
+set_default http_port 9910
+set_default auth_token ''
+set_default allow_direct 0
+set_default passthrough_china 0
+set_default spoof_dns 0
+set_default filter_ads 1
+set_default filter_nsfw 0
+set_default task_limit ''
+
+uci commit geph5
+chmod 0755 /etc/init.d/geph5 /usr/libexec/geph5-action 2>/dev/null || true
+/etc/init.d/geph5 enable
+/etc/init.d/geph5 generate 2>/dev/null || true
+
+exit 0

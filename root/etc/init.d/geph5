@@ -4,113 +4,155 @@ START=99
 STOP=10
 USE_PROCD=1
 
-CONF="geph5"
+NAME="geph5"
+CONFIG="geph5"
 YAML_FILE="/var/etc/geph5.yaml"
 
-start_service() {
-    config_load $CONF
-    local enabled
-    config_get_bool enabled geph5 enabled 0
+extra_command "generate" "Generate the runtime YAML configuration"
 
-    # 1. 强力清理逻辑：如果禁用，直接杀光进程
-    if [ "$enabled" -eq 0 ]; then
-        killall -9 geph5-client >/dev/null 2>&1
-        return 0
-    fi
-
-    local prog auth_token socks5_port http_port
-    config_get prog geph5 binary_path "/usr/bin/geph5-client"
-    config_get auth_token geph5 auth_token ""
-    config_get socks5_port geph5 socks5_port "9909"
-    config_get http_port geph5 http_port "9919"
-
-    if [ ! -x "$prog" ]; then
-        logger -t geph5 "Error: Binary not found at $prog"
-        return 1
-    fi
-
-    if [ -z "$auth_token" ]; then
-        logger -t geph5 "Error: Auth token is empty!"
-        return 1
-    fi
-
-    # 2. 密钥拼接 (防止 SSH 粘贴截断/编辑器换行问题)
-    local k1="3082010a0282010100d0ae53a794ea37bf2e100cb3a872177ec6c11e8375fdcbf92960ce0293465674eb1426a1841b7622a58979a5ff3f8aa2301a621545e9b90bb39d"
-    local k2="1a6bfda19d6ca1aae74a3192ddfd2b9558eb652c3c2c22f42bdde272852fb67d93cae5846213512c474bf799844aee019bf718f6fa64223be06364459fc8dec66796b141d"
-    local k3="450d730c4fffe1cac7df8f05591560afa44bcf274f6c0e2303b39c21ab09d19b459ee594512b8341f3d407c026e2509f42c6d89f82f6a3a36fd5c05ad423cd99ad390894"
-    local k4="03eb9122ea60ef6648afff65438e8e26ce41fa55b9b18741965c77a627bae947bd38fc345e9adab42d6c458f6e194e4232cfd3f04924d5a5e932fe769610203010001"
-    local bw_key="${k1}${k2}${k3}${k4}"
-
-    mkdir -p /var/etc
-
-    # 3. 生成 YAML 配置
-    cat <<YML > $YAML_FILE
-socks5_listen: 127.0.0.1:$socks5_port
-http_proxy_listen: 127.0.0.1:$http_port
-exit_constraint: auto
-bridge_mode: ForceBridges
-cache: /tmp/geph5.db
-passthrough_china: false
-spoof_dns: false
-task_limit: null
-vpn: false
-vpn_fd: null
-
-credentials:
-  secret: "$auth_token"
-
-sess_metadata:
-  filter:
-    ads: true
-    nsfw: false
-
-broker:
-  priority_race:
-    '0':
-      fronted:
-        front: https://www.cdn77.com/
-        host: 1826209743.rsc.cdn77.org
-        override_dns: null
-    '500':
-      fronted:
-        front: https://www.vuejs.org/
-        host: svitania-naidallszei-3.netlify.app
-        override_dns:
-        - 75.2.60.5:443
-
-broker_keys:
-  master: 88c1d2d4197bed815b01a22cadfc6c35aa246dddb553682037a118aebfaa3954
-  mizaru_free: 0558216cbab7a9c46f298f4c26e171add9af87d0694988b8a8fe52ee932aa754
-  mizaru_plus: cf6f58868c6d9459b3a63bc2bd86165631b3e916bad7f62b578cd9614e0bcb3b
-  mizaru_bw: $bw_key
-YML
-
-    # 4. 启动服务 (这是修复 "not running" 的关键区域)
-    procd_open_instance
-    procd_set_param command "$prog" -c "$YAML_FILE"
-
-    # 【关键修复】解除文件打开数限制 (解决启动崩溃)
-    procd_set_param limits nofile="65535"
-    
-    # 【辅助修复】补全环境变量 (模拟 SSH 环境)
-    procd_set_param env HOME="/root" VAR="/var"
-
-    # 日志与守护配置
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param respawn "${respawn_threshold:-3600}" "${respawn_timeout:-5}" "${respawn_retry:-5}"
-    
-    # 停止超时设置 (配合 killall 使用)
-    procd_set_param term_timeout 5
-    
-    procd_close_instance
+bool_value() {
+	[ "$1" = "1" ] && printf 'true' || printf 'false'
 }
 
-stop_service() {
-    # 双重保险：停止服务时强制查杀
-    killall -9 geph5-client >/dev/null 2>&1
+generate_config() {
+	local bind_address bind_endpoint socks5_port http_port auth_token
+	local allow_direct passthrough_china spoof_dns filter_ads filter_nsfw task_limit
+
+	config_load "$CONFIG"
+	config_get bind_address geph5 bind_address "127.0.0.1"
+	config_get socks5_port geph5 socks5_port "9909"
+	config_get http_port geph5 http_port "9910"
+	config_get auth_token geph5 auth_token ""
+	config_get_bool allow_direct geph5 allow_direct 0
+	config_get_bool passthrough_china geph5 passthrough_china 0
+	config_get_bool spoof_dns geph5 spoof_dns 0
+	config_get_bool filter_ads geph5 filter_ads 1
+	config_get_bool filter_nsfw geph5 filter_nsfw 0
+	config_get task_limit geph5 task_limit ""
+
+	case "$bind_address" in
+		*[!0-9A-Fa-f:.]*|'')
+			logger -t geph5 "invalid listen address"
+			return 1
+			;;
+	esac
+	case "$bind_address" in
+		*:*) bind_endpoint="[$bind_address]" ;;
+		*) bind_endpoint="$bind_address" ;;
+	esac
+
+	case "$socks5_port:$http_port" in
+		*[!0-9:]*|:*|*:)
+			logger -t geph5 "invalid proxy port configuration"
+			return 1
+			;;
+	esac
+	if [ "$socks5_port" -lt 1 ] || [ "$socks5_port" -gt 65535 ] || \
+	   [ "$http_port" -lt 1 ] || [ "$http_port" -gt 65535 ]; then
+		logger -t geph5 "proxy ports must be between 1 and 65535"
+		return 1
+	fi
+
+	if [ -n "$auth_token" ] && ! printf '%s' "$auth_token" | grep -Eq '^[0-9]{24}$'; then
+		logger -t geph5 "auth token must contain exactly 24 digits"
+		return 1
+	fi
+
+	case "$task_limit" in
+		''|*[!0-9]*) task_limit="null" ;;
+	esac
+
+	umask 077
+	mkdir -p "${YAML_FILE%/*}"
+
+	cat > "${YAML_FILE}.tmp" <<-EOF
+	socks5_listen: "${bind_endpoint}:${socks5_port}"
+	http_proxy_listen: "${bind_endpoint}:${http_port}"
+	pac_listen: null
+	control_listen: null
+	control_listen_unix: null
+	exit_constraint: auto
+	allow_direct: $(bool_value "$allow_direct")
+	cache: /tmp/geph5.db
+	broker:
+	  priority_race:
+	    '0':
+	      fronted:
+	        front: https://www.cdn77.com/
+	        host: 1826209743.rsc.cdn77.org
+	        override_dns: null
+	    '500':
+	      fronted:
+	        front: https://vuejs.org/
+	        host: svitania-naidallszei-2.netlify.app
+	        override_dns: null
+	tunneled_broker: null
+	broker_keys:
+	  master: 88c1d2d4197bed815b01a22cadfc6c35aa246dddb553682037a118aebfaa3954
+	  mizaru_free: 0558216cbab7a9c46f298f4c26e171add9af87d0694988b8a8fe52ee932aa754
+	  mizaru_plus: cf6f58868c6d9459b3a63bc2bd86165631b3e916bad7f62b578cd9614e0bcb3b
+	  mizaru_bw: 3082010a0282010100d0ae53a794ea37bf2e100cb3a872177ec6c11e8375fdcbf92960ce0293465674eb1426a1841b7622a58979a5ff3f8aa2301a621545e9b90bb39d1a6bfda19d6ca1aae74a3192ddfd2b9558eb652c3c2c22f42bdde272852fb67d93cae5846213512c474bf799844aee019bf718f6fa64223be06364459fc8dec66796b141d450d730c4fffe1cac7df8f05591560afa44bcf274f6c0e2303b39c21ab09d19b459ee594512b8341f3d407c026e2509f42c6d89f82f6a3a36fd5c05ad423cd99ad39089403eb9122ea60ef6648afff65438e8e26ce41fa55b9b18741965c77a627bae947bd38fc345e9adab42d6c458f6e194e4232cfd3f04924d5a5e932fe769610203010001
+	port_forward: []
+	vpn: false
+	vpn_fd: null
+	spoof_dns: $(bool_value "$spoof_dns")
+	passthrough_china: $(bool_value "$passthrough_china")
+	dry_run: false
+	credentials:
+	  secret: "${auth_token}"
+	sess_metadata:
+	  filter:
+	    ads: $(bool_value "$filter_ads")
+	    nsfw: $(bool_value "$filter_nsfw")
+	task_limit: ${task_limit}
+	EOF
+
+	chmod 0600 "${YAML_FILE}.tmp"
+	mv -f "${YAML_FILE}.tmp" "$YAML_FILE"
+}
+
+generate() {
+	generate_config
+}
+
+start_service() {
+	local enabled prog auth_token
+
+	config_load "$CONFIG"
+	config_get_bool enabled geph5 enabled 0
+	[ "$enabled" -eq 1 ] || return 0
+
+	config_get prog geph5 binary_path "/usr/bin/geph5-client"
+	config_get auth_token geph5 auth_token ""
+
+	if [ ! -x "$prog" ]; then
+		logger -t geph5 "geph5-client is missing or not executable: $prog"
+		return 1
+	fi
+
+	if ! printf '%s' "$auth_token" | grep -Eq '^[0-9]{24}$'; then
+		logger -t geph5 "auth token must contain exactly 24 digits"
+		return 1
+	fi
+
+	generate_config || return 1
+
+	procd_open_instance
+	procd_set_param command "$prog" -c "$YAML_FILE"
+	procd_set_param limits nofile="65535"
+	procd_set_param env HOME="/root" TMPDIR="/tmp"
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_set_param respawn 3600 5 5
+	procd_set_param term_timeout 10
+	procd_close_instance
+}
+
+reload_service() {
+	stop
+	start
 }
 
 service_triggers() {
-    procd_add_reload_trigger "$CONF"
+	procd_add_reload_trigger "$CONFIG"
 }
