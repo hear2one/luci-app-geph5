@@ -1,54 +1,65 @@
-name: Build LuCI App
+name: Build ImmortalWrt package
 
 on:
   push:
-    paths:
-      - '**'
+  pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-x86-64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SDK_URL: https://downloads.immortalwrt.org/releases/25.12.0/targets/x86/64/immortalwrt-sdk-25.12.0-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+      SDK_SHA256: c228059aa1e58c3b3ae58ce8dcc7549fd08379d8e231daf80fcca15b677564cb
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup OpenWrt SDK
+      - name: Install host tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libncurses5-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync swig unzip wget zstd
 
-          # 下载 SDK (以 x86_64 为例，如果是其他架构请自行替换链接)
-          wget https://downloads.openwrt.org/releases/23.05.2/targets/x86/64/openwrt-sdk-23.05.2-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-          
-          # 解压并重命名
-          tar -xf openwrt-sdk-*.tar.xz
-          rm openwrt-sdk-*.tar.xz
-          mv openwrt-sdk-* sdk
+      - name: Download ImmortalWrt 25.12 x86/64 SDK
+        run: |
+          wget -q --show-progress "$SDK_URL" -O sdk.tar.zst
+          echo "$SDK_SHA256  sdk.tar.zst" | sha256sum -c -
+          tar --zstd -xf sdk.tar.zst
+          mv immortalwrt-sdk-* sdk
+          rm -f sdk.tar.zst
 
-      - name: Prepare Package
+      - name: Prepare feeds
         run: |
           cd sdk
           ./scripts/feeds update -a
-          ./scripts/feeds install -a
-          
-          # 拷贝源码
-          mkdir -p package/luci-app-geph5
-          cd ..
-          cp -r Makefile luasrc root sdk/package/luci-app-geph5/
-          
-          # 配置
-          cd sdk
-          make defconfig
-          sed -i 's/# CONFIG_PACKAGE_luci-app-geph5 is not set/CONFIG_PACKAGE_luci-app-geph5=m/' .config
+          ./scripts/feeds install luci-base
+          ./scripts/feeds install ca-certificates
 
-      - name: Compile
+      - name: Add package
+        run: |
+          mkdir -p sdk/package/luci-app-geph5
+          rsync -a --delete --exclude='.git' --exclude='sdk' --exclude='artifacts' ./ sdk/package/luci-app-geph5/
+
+      - name: Build package
         run: |
           cd sdk
-          make package/luci-app-geph5/compile V=s
+          echo 'CONFIG_PACKAGE_luci-app-geph5=m' > .config
+          make defconfig
+          make package/luci-app-geph5/compile V=s -j"$(nproc)"
 
-      - name: Upload Artifact
+      - name: Collect package
+        run: |
+          mkdir -p artifacts
+          find sdk/bin -type f \( -name 'luci-app-geph5*.apk' -o -name 'luci-app-geph5*.ipk' \) -exec cp -v {} artifacts/ \;
+          test -n "$(find artifacts -type f -print -quit)"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: luci-app-geph5-ipk
-          path: sdk/bin/packages/*/base/luci-app-geph5_*.ipk
+          name: luci-app-geph5-immortalwrt-25.12-x86-64
+          path: artifacts/*
+          if-no-files-found: error

@@ -1,0 +1,10 @@
+* text=auto eol=lf
+Makefile text eol=lf
+*.sh text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+root/etc/init.d/* text eol=lf
+root/etc/config/* text eol=lf
+root/etc/uci-defaults/* text eol=lf
+root/usr/libexec/* text eol=lf

@@ -1,0 +1,14 @@
+{
+	"admin/services/geph5": {
+		"title": "Geph5 代理",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "geph5/main"
+		},
+		"depends": {
+			"acl": [ "luci-app-geph5" ],
+			"uci": { "geph5": true }
+		}
+	}
+}

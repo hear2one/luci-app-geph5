@@ -1,0 +1,30 @@
+{
+	"luci-app-geph5": {
+		"description": "Grant access to the Geph5 LuCI application",
+		"read": {
+			"cgi-io": [ "exec" ],
+			"file": {
+				"/usr/libexec/geph5-action status": [ "exec" ],
+				"/usr/libexec/geph5-action log": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "read" ]
+			},
+			"uci": [ "geph5" ]
+		},
+		"write": {
+			"file": {
+				"/tmp/geph5-client.upload": [ "write" ],
+				"/usr/libexec/geph5-action install-upload": [ "exec" ],
+				"/usr/libexec/geph5-action start": [ "exec" ],
+				"/usr/libexec/geph5-action stop": [ "exec" ],
+				"/usr/libexec/geph5-action restart": [ "exec" ],
+				"/usr/libexec/geph5-action generate": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "write" ]
+			},
+			"uci": [ "geph5" ]
+		}
+	}
+}
