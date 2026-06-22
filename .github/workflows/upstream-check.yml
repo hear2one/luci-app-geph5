@@ -12,6 +12,6 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Compare with geph-official/geph5
         run: sh scripts/check-upstream-compat.sh

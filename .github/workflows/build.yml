@@ -2,6 +2,8 @@ name: Build ImmortalWrt package
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -17,7 +19,7 @@ jobs:
       SDK_SHA256: c228059aa1e58c3b3ae58ce8dcc7549fd08379d8e231daf80fcca15b677564cb
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install host tools
         run: |
@@ -58,7 +60,7 @@ jobs:
           test -n "$(find artifacts -type f -print -quit)"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: luci-app-geph5-immortalwrt-25.12-x86-64
           path: artifacts/*
