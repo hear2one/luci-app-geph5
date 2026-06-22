@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-x86-64:
     runs-on: ubuntu-24.04
@@ -28,7 +32,7 @@ jobs:
 
       - name: Download ImmortalWrt 25.12 x86/64 SDK
         run: |
-          wget -q --show-progress "$SDK_URL" -O sdk.tar.zst
+          wget --tries=5 --timeout=30 --retry-connrefused --waitretry=5 --show-progress "$SDK_URL" -O sdk.tar.zst
           echo "$SDK_SHA256  sdk.tar.zst" | sha256sum -c -
           tar --zstd -xf sdk.tar.zst
           mv immortalwrt-sdk-* sdk
