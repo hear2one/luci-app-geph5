@@ -60,7 +60,7 @@ jobs:
           test -n "$(find artifacts -type f -print -quit)"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: luci-app-geph5-immortalwrt-25.12-x86-64
           path: artifacts/*
