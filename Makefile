@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-geph5
 PKG_VERSION:=2.0.0
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=hear2one

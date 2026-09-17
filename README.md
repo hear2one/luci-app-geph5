@@ -68,6 +68,8 @@ apk add --allow-untrusted --upgrade luci-app-geph5-*.apk
 
 配置格式依据 [geph-official/geph5](https://github.com/geph-official/geph5) 的公开 `Config` 类型和 `-c/--config` 参数生成，已核对的提交记录在 `UPSTREAM_VERSION`。
 
+Geph5 5.8 及以上版本不再接受旧的 `vpn` 和 `vpn_fd` YAML 字段。本插件以本地 SOCKS5/HTTP 代理模式运行 `geph5-client`，生成配置时会主动省略这两个字段。
+
 每周 Actions 会运行一次兼容性检查。也可手动执行：
 
 ```sh

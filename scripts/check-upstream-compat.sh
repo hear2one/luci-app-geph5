@@ -16,7 +16,7 @@ if [ -z "$UPSTREAM_DIR" ]; then
 	UPSTREAM_DIR="$TEMP_DIR/geph5"
 fi
 
-CONFIG_RS="$UPSTREAM_DIR/binaries/geph5-client/src/client.rs"
+CONFIG_RS="$UPSTREAM_DIR/libraries/geph5-misc-rpc/src/client_config.rs"
 CLI_RS="$UPSTREAM_DIR/binaries/geph5-client/src/bin/geph5-client.rs"
 
 [ -f "$CONFIG_RS" ] && [ -f "$CLI_RS" ] || {
@@ -27,12 +27,19 @@ CLI_RS="$UPSTREAM_DIR/binaries/geph5-client/src/bin/geph5-client.rs"
 for field in \
 	socks5_listen http_proxy_listen pac_listen control_listen control_listen_unix \
 	exit_constraint allow_direct cache broker tunneled_broker broker_keys port_forward \
-	vpn vpn_fd spoof_dns passthrough_china dry_run credentials sess_metadata task_limit
+	spoof_dns passthrough_china dry_run credentials sess_metadata task_limit
 do
 	grep -Eq "pub[[:space:]]+$field[[:space:]]*:" "$CONFIG_RS" || {
 		echo "upstream Config field missing or renamed: $field" >&2
 		exit 1
 	}
+done
+
+for obsolete_field in vpn vpn_fd; do
+	if grep -Eq "pub[[:space:]]+$obsolete_field[[:space:]]*:" "$CONFIG_RS"; then
+		echo "upstream restored obsolete Config field: $obsolete_field" >&2
+		exit 1
+	fi
 done
 
 grep -Eq '#\[arg\(short,[[:space:]]*long\)\]' "$CLI_RS" || {
